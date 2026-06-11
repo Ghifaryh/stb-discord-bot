@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  stb-bot:
+    build: .
+    container_name: stb-discord-bot
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN_HERE
+      # Tells gopsutil to check these mapped paths for host system metrics
+      - HOST_PROC=/host/proc
+      - HOST_SYS=/host/sys
+    volumes:
+      # Map storage paths as read-only so the container can check metrics safely
+      - /:/hostfs:ro
+      - /mnt/ssd:/mnt/ssd:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
