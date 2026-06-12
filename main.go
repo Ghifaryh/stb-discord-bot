@@ -78,12 +78,13 @@ func runPingTest(target string) string {
 		return "❌ Configuration Error"
 	}
 
-	// Crucial for running inside micro-environments/containers without root privileges
-	pinger.SetPrivileged(false)
-	pinger.Count = 1
+	// Change this to true! Combined with cap_add: [NET_ADMIN],
+	// this allows the container to send true, native ICMP frames.
+	pinger.SetPrivileged(true)
+	pinger.Count = 3
 	pinger.Timeout = time.Second * 3
 
-	err = pinger.Run() // Blocks until finished
+	err = pinger.Run()
 	if err != nil {
 		return "🔴 Request Timeout / Unreachable"
 	}
@@ -93,7 +94,6 @@ func runPingTest(target string) string {
 		return "🔴 100% Packet Loss (Offline)"
 	}
 
-	// Format output: "Avg: 12.4ms (0% loss)"
 	return fmt.Sprintf("⚡ **%v** (📉 %.0f%% loss)", stats.AvgRtt.Round(time.Millisecond), stats.PacketLoss)
 }
 

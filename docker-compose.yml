@@ -3,7 +3,9 @@ services:
     image: stb-bot:latest
     container_name: stb-discord-bot
     restart: unless-stopped
-    network_mode: host
+    # 1. Add Linux Capabilities to allow unprivileged raw ICMP sockets
+    cap_add:
+      - NET_ADMIN
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
