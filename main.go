@@ -30,29 +30,6 @@ func main() {
 			commandName := i.ApplicationCommandData().Name
 
 			switch commandName {
-			case "oldstatus":
-				// Fetch hardware metrics using gopsutil
-				vMem, _ := mem.VirtualMemory()
-				// Checking root / for internal space, and your SSD mount point
-				rootDisk, _ := disk.Usage("/")
-				ssdDisk, _ := disk.Usage("/mnt/ssd")
-
-				ramMsg := fmt.Sprintf("🧠 **RAM:** %dMB / %dMB (%.1f%% used)\n", vMem.Used/1024/1024, vMem.Total/1024/1024, vMem.UsedPercent)
-				rootMsg := fmt.Sprintf("💾 **Internal Storage (/)**: %.1fGB / %.1fGB used\n", float64(rootDisk.Used)/1024/1024/1024, float64(rootDisk.Total)/1024/1024/1024)
-
-				ssdMsg := "💽 **SSD (/mnt/ssd)**: Not found or unmounted\n"
-				if ssdDisk != nil && ssdDisk.Total > 0 {
-					ssdMsg = fmt.Sprintf("💽 **SSD (/mnt/ssd)**: %.1fGB / %.1fGB used (%.1f%% free)\n", float64(ssdDisk.Used)/1024/1024/1024, float64(ssdDisk.Total)/1024/1024/1024, 100-ssdDisk.UsedPercent)
-				}
-
-				statusReport := "📊 **STB System Status Report** 📊\n\n" + ramMsg + rootMsg + ssdMsg
-
-				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Content: statusReport,
-					},
-				})
 			case "ping":
 				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -84,7 +61,7 @@ func main() {
 					Data: &discordgo.InteractionResponseData{
 						Embeds: []*discordgo.MessageEmbed{
 							{
-								Title:       "Note", // Matches the "Note" header in your screenshot
+								Title:       "gip-hm-stb-01 System Status", // Matches the "Note" header in your screenshot
 								Description: descriptionText,
 								Color:       0xFFAA00, // Hex color code for that Orange/Yellow left border strip
 								Footer: &discordgo.MessageEmbedFooter{
@@ -108,10 +85,6 @@ func main() {
 
 	// Register the global slash command
 	commands := []*discordgo.ApplicationCommand{
-		{
-			Name:        "oldstatus",
-			Description: "Fetch current hardware metrics from the STB",
-		},
 		{
 			Name:        "ping",
 			Description: "Check if the bot is alive",
