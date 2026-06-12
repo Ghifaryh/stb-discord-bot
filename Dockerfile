@@ -1,12 +1,10 @@
-FROM alpine:3.19
+# Start with an absolutely empty 0-byte layer
+FROM scratch
 
 WORKDIR /app
 
-# Install certificates and the native Docker CLI tool
-RUN apk --no-cache add ca-certificates docker-cli
-
-# Copy your local pre-compiled binary
+# Copy the pre-compiled binary from your SSD project directory
 COPY stb-bot .
-RUN chmod +x stb-bot
 
+# Run it directly
 CMD ["./stb-bot"]

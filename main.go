@@ -1,11 +1,13 @@
 package main
 
 import (
-	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
-	"os/exec" // <-- Native Go package to run system commands
 	"os/signal"
 	"strings"
 	"syscall"
@@ -15,47 +17,54 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
-func getDockerContainers() string {
-	// Execute: docker ps --format "{{.Status}}\t{{.Names}}"
-	// This returns clean lines like: "Up 2 hours	postgres"
-	cmd := exec.Command("docker", "ps", "-a", "--format", "{{.State}}\t{{.Names}}\t{{.Status}}")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
+type ContainerInfo struct {
+	Names  []string `json:"Names"`
+	State  string   `json:"State"`
+	Status string   `json:"Status"`
+}
 
-	err := cmd.Run()
-	if err != nil {
-		return "❌ Error: Unable to communicate with Docker engine. Make sure docker.sock is mounted."
+func getDockerContainers() string {
+	// Create an HTTP client that communicates over the Unix Domain Socket
+	client := http.Client{
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", "/var/run/docker.sock")
+			},
+		},
 	}
 
-	output := strings.TrimSpace(out.String())
-	if output == "" {
+	// Query the native Docker Engine API directly for all containers
+	resp, err := client.Get("http://localhost/v1.45/containers/json?all=1")
+	if err != nil {
+		return "❌ Error: Unable to communicate with Docker socket."
+	}
+	defer resp.Body.Close()
+
+	var containers []ContainerInfo
+	if err := json.NewDecoder(resp.Body).Decode(&containers); err != nil {
+		return "❌ Error: Failed to parse container metadata."
+	}
+
+	if len(containers) == 0 {
 		return "ℹ️ No containers found on this system."
 	}
 
-	lines := strings.Split(output, "\n")
 	var sb strings.Builder
-
-	for _, line := range lines {
-		parts := strings.Split(line, "\t")
-		if len(parts) < 3 {
-			continue
+	for _, c := range containers {
+		name := "unknown"
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
 		}
-		state := parts[0]
-		name := parts[1]
-		status := parts[2]
 
-		// Choose emoji based on state
 		statusEmoji := "🔴"
-		if state == "running" {
+		switch c.State {
+		case "running":
 			statusEmoji = "🟢"
-		} else if state == "paused" {
+		case "paused":
 			statusEmoji = "🟡"
 		}
 
-		// Append styled line: 🟢 **postgres**
-		//                     └─ *Status:* Up 2 hours
-		sb.WriteString(fmt.Sprintf("%s **%s**\n└─ *Status:* %s\n\n", statusEmoji, name, status))
+		sb.WriteString(fmt.Sprintf("%s **%s**\n└─ *Status:* %s\n\n", statusEmoji, name, c.Status))
 	}
 
 	return sb.String()
