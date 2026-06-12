@@ -1,57 +1,61 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"fmt"
 	"log"
 	"os"
+	"os/exec" // <-- Native Go package to run system commands
 	"os/signal"
 	"strings"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
 func getDockerContainers() string {
-	// Initialize the client pointing to the mounted unix socket
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return "❌ Error: Unable to connect to Docker engine."
-	}
-	defer cli.Close()
+	// Execute: docker ps --format "{{.Status}}\t{{.Names}}"
+	// This returns clean lines like: "Up 2 hours	postgres"
+	cmd := exec.Command("docker", "ps", "-a", "--format", "{{.State}}\t{{.Names}}\t{{.Status}}")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
 
-	// Fetch ALL containers (even stopped ones) using the correct container types package
-	containers, err := cli.ContainerList(context.Background(), container.ListOptions{All: true})
+	err := cmd.Run()
 	if err != nil {
-		return "❌ Error: Failed to fetch container list."
+		return "❌ Error: Unable to communicate with Docker engine. Make sure docker.sock is mounted."
 	}
 
-	if len(containers) == 0 {
+	output := strings.TrimSpace(out.String())
+	if output == "" {
 		return "ℹ️ No containers found on this system."
 	}
 
+	lines := strings.Split(output, "\n")
 	var sb strings.Builder
-	for _, c := range containers {
-		// Clean up container name (removes the leading slash)
-		name := "unknown"
-		if len(c.Names) > 0 {
-			name = strings.TrimPrefix(c.Names[0], "/")
+
+	for _, line := range lines {
+		parts := strings.Split(line, "\t")
+		if len(parts) < 3 {
+			continue
 		}
+		state := parts[0]
+		name := parts[1]
+		status := parts[2]
 
 		// Choose emoji based on state
 		statusEmoji := "🔴"
-		if c.State == "running" {
+		if state == "running" {
 			statusEmoji = "🟢"
-		} else if c.State == "paused" {
+		} else if state == "paused" {
 			statusEmoji = "🟡"
 		}
 
-		// Append styled line
-		sb.WriteString(fmt.Sprintf("%s **%s**\n└─ *Status:* %s\n\n", statusEmoji, name, c.Status))
+		// Append styled line: 🟢 **postgres**
+		//                     └─ *Status:* Up 2 hours
+		sb.WriteString(fmt.Sprintf("%s **%s**\n└─ *Status:* %s\n\n", statusEmoji, name, status))
 	}
 
 	return sb.String()
