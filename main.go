@@ -78,13 +78,12 @@ func runPingTest(target string) string {
 		return "❌ Configuration Error"
 	}
 
-	// Change this to true! Combined with cap_add: [NET_ADMIN],
-	// this allows the container to send true, native ICMP frames.
-	pinger.SetPrivileged(true)
-	pinger.Count = 3
+	// Crucial for running inside micro-environments/containers without root privileges
+	pinger.SetPrivileged(false)
+	pinger.Count = 1
 	pinger.Timeout = time.Second * 3
 
-	err = pinger.Run()
+	err = pinger.Run() // Blocks until finished
 	if err != nil {
 		return "🔴 Request Timeout / Unreachable"
 	}
@@ -94,6 +93,7 @@ func runPingTest(target string) string {
 		return "🔴 100% Packet Loss (Offline)"
 	}
 
+	// Format output: "Avg: 12.4ms (0% loss)"
 	return fmt.Sprintf("⚡ **%v** (📉 %.0f%% loss)", stats.AvgRtt.Round(time.Millisecond), stats.PacketLoss)
 }
 
@@ -197,11 +197,11 @@ func main() {
 				}
 
 				// 2. Run your metric tests safely without rushing the CPU
-				routerPing := runPingTest("192.168.1.1")
+				routerPing := runPingTest("192.168.100.1")
 				internetPing := runPingTest("1.1.1.1")
 
 				// Format the text string block
-				networkReport := fmt.Sprintf("🏠 **Local Gateway (192.168.1.1):** %s\n\n🌐 **Internet Backbone (1.1.1.1):** %s", routerPing, internetPing)
+				networkReport := fmt.Sprintf("🏠 **Local Gateway (192.168.100.1):** %s\n\n🌐 **Internet Backbone (1.1.1.1):** %s", routerPing, internetPing)
 
 				// 3. Follow up by overwriting the "thinking" status with your final card layout
 				_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
