@@ -1,6 +1,6 @@
 services:
   stb-bot:
-    build: .
+    image: stb-bot:latest
     container_name: stb-discord-bot
     restart: unless-stopped
     environment:

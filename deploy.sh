@@ -1,26 +1,26 @@
 #!/bin/bash
 
-# 1. Compile the standalone ARM64 binary locally on your laptop
-echo "⚙️ Compiling Go binary for ARM64..."
+# Exit script immediately if any individual step fails
+set -e
+
+echo "⚙️  1. Compiling standalone Go binary for ARM64..."
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o stb-bot .
 
-# 2. Build the Docker image locally
-echo "🐋 Packing Docker image..."
+echo "🐋 2. Building Docker image locally on laptop..."
 docker build -t stb-bot:latest .
 
-# 3. Export the image to a transportable tar file
-echo "📦 Exporting image layers..."
+echo "📦 3. Compressing image layers to tar archive..."
 docker save stb-bot:latest -o stb-bot.tar
 
-# 4. Sync BOTH the image payload AND the fresh docker-compose configuration
-echo "🚀 Shipping assets to STB..."
+echo "🚀 4. Shipping packed assets to STB storage..."
+# Ships only the pre-baked tar payload and the configuration file over Tailscale
 scp stb-bot.tar docker-compose.yml root@100.84.225.86:/mnt/ssd/projects/stb-discord-bot/
 
-# 5. Load, purge tar, and force recreate the tracking container
-echo "🔄 Reloading container on host..."
+echo "🔄 5. Ingesting image and hot-swapping container process on STB..."
+# Tells the remote host to load the image, drop the old container instance, and deploy the fresh state
 ssh root@100.84.225.86 "cd /mnt/ssd/projects/stb-discord-bot && docker load -i stb-bot.tar && rm stb-bot.tar && docker compose up -d --force-recreate"
 
-# 6. Clean up the local tar file on your laptop
-rm stb-bot.tar
+echo "🧹 6. Cleaning temporary local workspace artifacts..."
+rm -f stb-bot stb-bot.tar
 
-echo "🎯 Update complete! Check your Discord monitor."
+echo "🎯 Deployment complete! /ping-isp is live on your server."
