@@ -30,7 +30,7 @@ func main() {
 			commandName := i.ApplicationCommandData().Name
 
 			switch commandName {
-			case "status":
+			case "oldstatus":
 				// Fetch hardware metrics using gopsutil
 				vMem, _ := mem.VirtualMemory()
 				// Checking root / for internal space, and your SSD mount point
@@ -60,6 +60,43 @@ func main() {
 						Content: "🏓 Pong! Your STB is awake and listening over Tailscale.",
 					},
 				})
+
+			case "status":
+				// 1. Fetch your hardware metrics (keeping your existing logic)
+				vMem, _ := mem.VirtualMemory()
+				rootDisk, _ := disk.Usage("/")
+				ssdDisk, _ := disk.Usage("/mnt/ssd")
+
+				ramMsg := fmt.Sprintf("🧠 **RAM:** %dMB / %dMB (%.1f%% used)", vMem.Used/1024/1024, vMem.Total/1024/1024, vMem.UsedPercent)
+				rootMsg := fmt.Sprintf("💾 **Internal Storage (/)**: %.1fGB / %.1fGB used", float64(rootDisk.Used)/1024/1024/1024, float64(rootDisk.Total)/1024/1024/1024)
+
+				ssdMsg := "💽 **SSD (/mnt/ssd)**: Not found or unmounted"
+				if ssdDisk != nil && ssdDisk.Total > 0 {
+					ssdMsg = fmt.Sprintf("💽 **SSD (/mnt/ssd)**: %.1fGB / %.1fGB used (%.1f%% free)", float64(ssdDisk.Used)/1024/1024/1024, float64(ssdDisk.Total)/1024/1024/1024, 100-ssdDisk.UsedPercent)
+				}
+
+				// 2. Build the structural description string
+				descriptionText := fmt.Sprintf("%s\n\n%s\n\n%s", ramMsg, rootMsg, ssdMsg)
+
+				// 3. Respond with a Discord Embed
+				err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Embeds: []*discordgo.MessageEmbed{
+							{
+								Title:       "Note", // Matches the "Note" header in your screenshot
+								Description: descriptionText,
+								Color:       0xFFAA00, // Hex color code for that Orange/Yellow left border strip
+								Footer: &discordgo.MessageEmbedFooter{
+									Text: "Last checked: Just now", // Replaces the "Last edited" meta note
+								},
+							},
+						},
+					},
+				})
+				if err != nil {
+					log.Printf("Error responding to status command: %v", err)
+				}
 			}
 		}
 	})
@@ -72,12 +109,16 @@ func main() {
 	// Register the global slash command
 	commands := []*discordgo.ApplicationCommand{
 		{
-			Name:        "status",
+			Name:        "oldstatus",
 			Description: "Fetch current hardware metrics from the STB",
 		},
 		{
 			Name:        "ping",
 			Description: "Check if the bot is alive",
+		},
+		{
+			Name:        "status",
+			Description: "Fetch a prettified version of the hardware status",
 		},
 	}
 	_, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, guildID, commands)
