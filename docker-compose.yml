@@ -13,5 +13,6 @@ services:
     volumes:
       - /:/hostfs:ro
       - /mnt/ssd:/mnt/ssd:ro
+      - /mnt/storage:/mnt/storage:ro
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro

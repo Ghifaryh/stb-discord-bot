@@ -14,7 +14,7 @@ import (
 
 func main() {
 	token := os.Getenv("DISCORD_TOKEN")
-	guildID := os.Getenv("DISCORD_GUILD_ID")
+	// guildID := os.Getenv("DISCORD_GUILD_ID")
 	if token == "" {
 		log.Fatal("Error: DISCORD_TOKEN environment variable is required")
 	}
@@ -43,6 +43,7 @@ func main() {
 				vMem, _ := mem.VirtualMemory()
 				rootDisk, _ := disk.Usage("/")
 				ssdDisk, _ := disk.Usage("/mnt/ssd")
+				sdDisk, _ := disk.Usage("/mnt/storage")
 
 				ramMsg := fmt.Sprintf("🧠 **RAM:** %dMB / %dMB (%.1f%% used)", vMem.Used/1024/1024, vMem.Total/1024/1024, vMem.UsedPercent)
 				rootMsg := fmt.Sprintf("💾 **Internal Storage (/)**: %.1fGB / %.1fGB used", float64(rootDisk.Used)/1024/1024/1024, float64(rootDisk.Total)/1024/1024/1024)
@@ -52,8 +53,13 @@ func main() {
 					ssdMsg = fmt.Sprintf("💽 **SSD (/mnt/ssd)**: %.1fGB / %.1fGB used (%.1f%% free)", float64(ssdDisk.Used)/1024/1024/1024, float64(ssdDisk.Total)/1024/1024/1024, 100-ssdDisk.UsedPercent)
 				}
 
+				sdMsg := "📟 **SD Card (/mnt/storage)**: Not found or unmounted"
+				if sdDisk != nil && sdDisk.Total > 0 {
+					sdMsg = fmt.Sprintf("📟 **SD Card (/mnt/storage)**: %.1fGB / %.1fGB used (%.1f%% free)", float64(sdDisk.Used)/1024/1024/1024, float64(sdDisk.Total)/1024/1024/1024, 100-sdDisk.UsedPercent)
+				}
+
 				// 2. Build the structural description string
-				descriptionText := fmt.Sprintf("%s\n\n%s\n\n%s", ramMsg, rootMsg, ssdMsg)
+				descriptionText := fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s", ramMsg, rootMsg, ssdMsg, sdMsg)
 
 				// 3. Respond with a Discord Embed
 				err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -61,11 +67,11 @@ func main() {
 					Data: &discordgo.InteractionResponseData{
 						Embeds: []*discordgo.MessageEmbed{
 							{
-								Title:       "gip-hm-stb-01 System Status", // Matches the "Note" header in your screenshot
+								Title:       "[gip-hm-stb-01] • System Status",
 								Description: descriptionText,
 								Color:       0xFFAA00, // Hex color code for that Orange/Yellow left border strip
 								Footer: &discordgo.MessageEmbedFooter{
-									Text: "Last checked: Just now", // Replaces the "Last edited" meta note
+									Text: "Last checked: Just now",
 								},
 							},
 						},
@@ -94,7 +100,8 @@ func main() {
 			Description: "Fetch a prettified version of the hardware status",
 		},
 	}
-	_, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, guildID, commands)
+	// _, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, guildID, commands)
+	_, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, "", commands)
 
 	fmt.Println("Bot is now running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
