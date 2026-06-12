@@ -1,16 +1,61 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
 )
+
+func getDockerContainers() string {
+	// Initialize the client pointing to the mounted unix socket
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return "❌ Error: Unable to connect to Docker engine."
+	}
+	defer cli.Close()
+
+	// Fetch ALL containers (even stopped ones) using the correct container types package
+	containers, err := cli.ContainerList(context.Background(), container.ListOptions{All: true})
+	if err != nil {
+		return "❌ Error: Failed to fetch container list."
+	}
+
+	if len(containers) == 0 {
+		return "ℹ️ No containers found on this system."
+	}
+
+	var sb strings.Builder
+	for _, c := range containers {
+		// Clean up container name (removes the leading slash)
+		name := "unknown"
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+
+		// Choose emoji based on state
+		statusEmoji := "🔴"
+		if c.State == "running" {
+			statusEmoji = "🟢"
+		} else if c.State == "paused" {
+			statusEmoji = "🟡"
+		}
+
+		// Append styled line
+		sb.WriteString(fmt.Sprintf("%s **%s**\n└─ *Status:* %s\n\n", statusEmoji, name, c.Status))
+	}
+
+	return sb.String()
+}
 
 func main() {
 	token := os.Getenv("DISCORD_TOKEN")
@@ -80,7 +125,27 @@ func main() {
 				if err != nil {
 					log.Printf("Error responding to status command: %v", err)
 				}
+
+			case "services":
+				dockerReport := getDockerContainers()
+
+				err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Embeds: []*discordgo.MessageEmbed{
+							{
+								Title:       "🖥️ gip-hm-stb-01 • Container Monitor",
+								Description: dockerReport,
+								Color:       0x00AAFF, // Clean blue color accent
+							},
+						},
+					},
+				})
+				if err != nil {
+					log.Printf("Error responding to services command: %v", err)
+				}
 			}
+
 		}
 	})
 
@@ -98,6 +163,10 @@ func main() {
 		{
 			Name:        "status",
 			Description: "Fetch a prettified version of the hardware status",
+		},
+		{
+			Name:        "services",
+			Description: "List all running Docker containers and their statuses",
 		},
 	}
 	// _, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, guildID, commands)
