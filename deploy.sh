@@ -12,13 +12,13 @@ docker build -t stb-bot:latest .
 echo "📦 Exporting image layers..."
 docker save stb-bot:latest -o stb-bot.tar
 
-# 4. Sync the tar archive and the docker-compose config over to the STB SSD
+# 4. Sync BOTH the image payload AND the fresh docker-compose configuration
 echo "🚀 Shipping assets to STB..."
 scp stb-bot.tar docker-compose.yml root@100.84.225.86:/mnt/ssd/projects/stb-discord-bot/
 
-# 5. Connect to the STB over SSH to load the image, clean up the tar file, and swap the container
+# 5. Load, purge tar, and force recreate the tracking container
 echo "🔄 Reloading container on host..."
-ssh root@100.84.225.86 "cd /mnt/ssd/projects/stb-discord-bot && docker load -i stb-bot.tar && rm stb-bot.tar && docker compose up -d"
+ssh root@100.84.225.86 "cd /mnt/ssd/projects/stb-discord-bot && docker load -i stb-bot.tar && rm stb-bot.tar && docker compose up -d --force-recreate"
 
 # 6. Clean up the local tar file on your laptop
 rm stb-bot.tar

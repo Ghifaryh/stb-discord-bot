@@ -186,29 +186,30 @@ func main() {
 				}
 
 			case "ping-isp":
-				// Defer the response immediately so Discord doesn't timeout
-				_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Content: "🔄 Running latency diagnostics on IndiHome line...",
-					},
+				// 1. Tell Discord INSTANTLY to display a loading state ("Bot is thinking...")
+				// This completely resets the 3-second timeout window to 15 minutes!
+				err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 				})
+				if err != nil {
+					log.Printf("Error sending deferred response: %v", err)
+					return
+				}
 
-				// Run diagnostic tests
+				// 2. Run your metric tests safely without rushing the CPU
 				routerPing := runPingTest("192.168.1.1")
 				internetPing := runPingTest("1.1.1.1")
 
-				// Format description string
+				// Format the text string block
 				networkReport := fmt.Sprintf("🏠 **Local Gateway (192.168.1.1):** %s\n\n🌐 **Internet Backbone (1.1.1.1):** %s", routerPing, internetPing)
 
-				// Use the correct session method name here:
-				_, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-					Content: new(string), // Clears out the initial loading string text
+				// 3. Follow up by overwriting the "thinking" status with your final card layout
+				_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 					Embeds: &[]*discordgo.MessageEmbed{
 						{
 							Title:       "[gip-hm-stb-01] • Network Health Diagnostics",
 							Description: networkReport,
-							Color:       0x00FF88, // Clean minty green accent color
+							Color:       0x00FF88, // Clean minty green
 							Footer: &discordgo.MessageEmbedFooter{
 								Text: "Target Network: IndiHome Fiber",
 							},
@@ -216,7 +217,7 @@ func main() {
 					},
 				})
 				if err != nil {
-					log.Printf("Error editing interaction response: %v", err)
+					log.Printf("Error editing final interaction response: %v", err)
 				}
 			}
 
@@ -243,10 +244,11 @@ func main() {
 			Description: "List all running Docker containers and their statuses",
 		},
 		{
-			Name:        "pingisp",
+			Name:        "ping-isp",
 			Description: "Run real-time network latency diagnostics for IndiHome",
 		},
 	}
+	log.Println("Wiping guild commands...")
 	// _, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, guildID, commands)
 	_, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, "", commands)
 
