@@ -7,6 +7,7 @@ services:
     restart: unless-stopped
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
       - HOST_PROC=/host/proc
       - HOST_SYS=/host/sys
     volumes:

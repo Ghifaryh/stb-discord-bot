@@ -14,6 +14,7 @@ import (
 
 func main() {
 	token := os.Getenv("DISCORD_TOKEN")
+	guildID := os.Getenv("DISCORD_GUILD_ID")
 	if token == "" {
 		log.Fatal("Error: DISCORD_TOKEN environment variable is required")
 	}
@@ -26,8 +27,11 @@ func main() {
 	// Register slash command handler
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if i.Type == discordgo.InteractionApplicationCommand {
-			if i.ApplicationCommandData().Name == "status" {
-				// Fetch Metrics
+			commandName := i.ApplicationCommandData().Name
+
+			switch commandName {
+			case "status":
+				// Fetch hardware metrics using gopsutil
 				vMem, _ := mem.VirtualMemory()
 				// Checking root / for internal space, and your SSD mount point
 				rootDisk, _ := disk.Usage("/")
@@ -49,6 +53,13 @@ func main() {
 						Content: statusReport,
 					},
 				})
+			case "ping":
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "🏓 Pong! Your STB is awake and listening over Tailscale.",
+					},
+				})
 			}
 		}
 	})
@@ -64,8 +75,12 @@ func main() {
 			Name:        "status",
 			Description: "Fetch current hardware metrics from the STB",
 		},
+		{
+			Name:        "ping",
+			Description: "Check if the bot is alive",
+		},
 	}
-	_, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, "", commands)
+	_, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, guildID, commands)
 
 	fmt.Println("Bot is now running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
