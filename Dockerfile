@@ -1,14 +1,15 @@
-FROM alpine:3.19
+# Stage 1: Force your laptop's native architecture for downloading certificates
+FROM --platform=$BUILDPLATFORM alpine:3.19 AS certs
+RUN apk --no-cache add ca-certificates
 
+# Stage 2: The final clean ARM64 target container (No commands executed!)
+FROM alpine:3.19
 WORKDIR /app
 
-# Install security certificates and force clear the cache
-RUN apk update && apk --no-cache add ca-certificates
+# 1. Copy the certificates from Stage 1
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-# Copy your local pre-compiled binary
-COPY stb-bot .
-
-# Ensure permissions are correct
-RUN chmod +x stb-bot
+# 2. Copy the binary and set permissions at the exact same time!
+COPY --chmod=755 stb-bot .
 
 CMD ["./stb-bot"]

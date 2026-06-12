@@ -80,7 +80,7 @@ func runPingTest(target string) string {
 
 	// Crucial for running inside micro-environments/containers without root privileges
 	pinger.SetPrivileged(false)
-	pinger.Count = 3
+	pinger.Count = 1
 	pinger.Timeout = time.Second * 3
 
 	err = pinger.Run() // Blocks until finished
@@ -248,7 +248,7 @@ func main() {
 			Description: "Run real-time network latency diagnostics for IndiHome",
 		},
 	}
-	log.Println("Wiping guild commands...")
+	// log.Println("Wiping guild commands...") // check if the build is okay or nah
 	// _, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, guildID, commands)
 	_, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, "", commands)
 

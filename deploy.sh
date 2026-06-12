@@ -7,7 +7,7 @@ echo "⚙️  1. Compiling standalone Go binary for ARM64..."
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o stb-bot .
 
 echo "🐋 2. Building Docker image locally on laptop..."
-docker build -t stb-bot:latest .
+docker build --platform linux/arm64 -t stb-bot:latest .
 
 echo "📦 3. Compressing image layers to tar archive..."
 docker save stb-bot:latest -o stb-bot.tar
@@ -23,4 +23,4 @@ ssh root@100.84.225.86 "cd /mnt/ssd/projects/stb-discord-bot && docker load -i s
 echo "🧹 6. Cleaning temporary local workspace artifacts..."
 rm -f stb-bot stb-bot.tar
 
-echo "🎯 Deployment complete! /ping-isp is live on your server."
+echo "🎯 Deployment complete! All commands are live on your server."
