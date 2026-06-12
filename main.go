@@ -11,8 +11,10 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
+	probing "github.com/prometheus-community/pro-bing"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
 )
@@ -68,6 +70,31 @@ func getDockerContainers() string {
 	}
 
 	return sb.String()
+}
+
+func runPingTest(target string) string {
+	pinger, err := probing.NewPinger(target)
+	if err != nil {
+		return "❌ Configuration Error"
+	}
+
+	// Crucial for running inside micro-environments/containers without root privileges
+	pinger.SetPrivileged(false)
+	pinger.Count = 3
+	pinger.Timeout = time.Second * 3
+
+	err = pinger.Run() // Blocks until finished
+	if err != nil {
+		return "🔴 Request Timeout / Unreachable"
+	}
+
+	stats := pinger.Statistics()
+	if stats.PacketLoss == 100 {
+		return "🔴 100% Packet Loss (Offline)"
+	}
+
+	// Format output: "Avg: 12.4ms (0% loss)"
+	return fmt.Sprintf("⚡ **%v** (📉 %.0f%% loss)", stats.AvgRtt.Round(time.Millisecond), stats.PacketLoss)
 }
 
 func main() {
@@ -157,6 +184,40 @@ func main() {
 				if err != nil {
 					log.Printf("Error responding to services command: %v", err)
 				}
+
+			case "ping-isp":
+				// Defer the response immediately so Discord doesn't timeout
+				_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "🔄 Running latency diagnostics on IndiHome line...",
+					},
+				})
+
+				// Run diagnostic tests
+				routerPing := runPingTest("192.168.1.1")
+				internetPing := runPingTest("1.1.1.1")
+
+				// Format description string
+				networkReport := fmt.Sprintf("🏠 **Local Gateway (192.168.1.1):** %s\n\n🌐 **Internet Backbone (1.1.1.1):** %s", routerPing, internetPing)
+
+				// Use the correct session method name here:
+				_, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+					Content: new(string), // Clears out the initial loading string text
+					Embeds: &[]*discordgo.MessageEmbed{
+						{
+							Title:       "[gip-hm-stb-01] • Network Health Diagnostics",
+							Description: networkReport,
+							Color:       0x00FF88, // Clean minty green accent color
+							Footer: &discordgo.MessageEmbedFooter{
+								Text: "Target Network: IndiHome Fiber",
+							},
+						},
+					},
+				})
+				if err != nil {
+					log.Printf("Error editing interaction response: %v", err)
+				}
 			}
 
 		}
@@ -180,6 +241,10 @@ func main() {
 		{
 			Name:        "services",
 			Description: "List all running Docker containers and their statuses",
+		},
+		{
+			Name:        "pingisp",
+			Description: "Run real-time network latency diagnostics for IndiHome",
 		},
 	}
 	// _, _ = dg.ApplicationCommandBulkOverwrite(dg.State.User.ID, guildID, commands)
