@@ -1,10 +1,14 @@
-# Start with an absolutely empty 0-byte layer
-FROM scratch
+FROM alpine:3.19
 
 WORKDIR /app
 
-# Copy the pre-compiled binary from your SSD project directory
+# Install security certificates and force clear the cache
+RUN apk update && apk --no-cache add ca-certificates
+
+# Copy your local pre-compiled binary
 COPY stb-bot .
 
-# Run it directly
+# Ensure permissions are correct
+RUN chmod +x stb-bot
+
 CMD ["./stb-bot"]
