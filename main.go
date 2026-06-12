@@ -97,6 +97,63 @@ func runPingTest(target string) string {
 	return fmt.Sprintf("⚡ **%v** (📉 %.0f%% loss)", stats.AvgRtt.Round(time.Millisecond), stats.PacketLoss)
 }
 
+func startDailyDigest(s *discordgo.Session, channelID string) {
+	go func() {
+		for {
+			// 1. Calculate the exact duration until the next 06:00 AM
+			now := time.Now()
+			nextRun := time.Date(now.Year(), now.Month(), now.Day(), 6, 0, 0, 0, now.Location())
+
+			// If it's already past 6:00 AM today, schedule it for tomorrow morning
+			if now.After(nextRun) {
+				nextRun = nextRun.Add(24 * time.Hour)
+			}
+
+			log.Printf("[Digest] Next automated health report scheduled for: %v", nextRun)
+			time.Sleep(time.Until(nextRun))
+
+			// 2. Woke up! Compile hardware metrics (reusing your existing status logic)
+			vMem, _ := mem.VirtualMemory()
+			rootDisk, _ := disk.Usage("/")
+			ssdDisk, _ := disk.Usage("/mnt/ssd")
+			sdDisk, _ := disk.Usage("/mnt/storage")
+
+			ramMsg := fmt.Sprintf("🧠 **RAM:** %dMB / %dMB (%.1f%% used)", vMem.Used/1024/1024, vMem.Total/1024/1024, vMem.UsedPercent)
+			rootMsg := fmt.Sprintf("💾 **Internal Storage (/)**: %.1fGB / %.1fGB used", float64(rootDisk.Used)/1024/1024/1024, float64(rootDisk.Total)/1024/1024/1024)
+
+			ssdMsg := "💽 **SSD (/mnt/ssd)**: Not found or unmounted"
+			if ssdDisk != nil && ssdDisk.Total > 0 {
+				ssdMsg = fmt.Sprintf("💽 **SSD (/mnt/ssd)**: %.1fGB / %.1fGB used (%.1f%% free)", float64(ssdDisk.Used)/1024/1024/1024, float64(ssdDisk.Total)/1024/1024/1024, 100-ssdDisk.UsedPercent)
+			}
+
+			sdMsg := "📟 **SD Card (/mnt/storage)**: Not found or unmounted"
+			if sdDisk != nil && sdDisk.Total > 0 {
+				sdMsg = fmt.Sprintf("📟 **SD Card (/mnt/storage)**: %.1fGB / %.1fGB used (%.1f%% free)", float64(sdDisk.Used)/1024/1024/1024, float64(sdDisk.Total)/1024/1024/1024, 100-sdDisk.UsedPercent)
+			}
+
+			// 3. Fetch running container services
+			dockerReport := getDockerContainers()
+
+			// 4. Combine reports into a clean morning layout
+			embed := &discordgo.MessageEmbed{
+				Title:       "🌅 gip-hm-stb-01 • Daily Automated Health Digest",
+				Description: fmt.Sprintf("### 📊 System Resources\n%s\n\n%s\n\n%s\n\n%s\n\n### 🐳 Managed Container Services\n%s", ramMsg, rootMsg, ssdMsg, sdMsg, dockerReport),
+				Color:       0x9B59B6, // Beautiful sunrise purple accent
+				Timestamp:   time.Now().Format(time.RFC3339),
+				Footer: &discordgo.MessageEmbedFooter{
+					Text: "Automated Routine Health Status Check",
+				},
+			}
+
+			// 5. Inject the dispatch straight into your administrative channel
+			_, err := s.ChannelMessageSendEmbed(channelID, embed)
+			if err != nil {
+				log.Printf("[Digest Error] Failed to dispatch health digest message: %v", err)
+			}
+		}
+	}()
+}
+
 func main() {
 	token := os.Getenv("DISCORD_TOKEN")
 	// guildID := os.Getenv("DISCORD_GUILD_ID")
@@ -227,6 +284,15 @@ func main() {
 	err = dg.Open()
 	if err != nil {
 		log.Fatalf("Error opening connection: %v", err)
+	}
+
+	// Fetch a dedicated logging channel ID from your environment variables
+	logChannelID := os.Getenv("DISCORD_LOG_CHANNEL_ID")
+	if logChannelID != "" {
+		startDailyDigest(dg, logChannelID)
+		log.Println("🚀 Automated Morning Health Digest subsystem initialized.")
+	} else {
+		log.Println("⚠️  DISCORD_LOG_CHANNEL_ID not set; skipping digest automation initialization.")
 	}
 
 	// Register the global slash command
