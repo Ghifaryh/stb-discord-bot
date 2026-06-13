@@ -31,14 +31,20 @@ type Fail2BanPayload struct {
 // 🌅 Automated Morning 06:00 AM Cron Routine
 func startDailyDigest(s *discordgo.Session, channelID string) {
 	go func() {
+		loc, err := time.LoadLocation("Asia/Jakarta")
+		if err != nil {
+			log.Printf("[Digest Error] Failed to load local timezone: %v, defaulting to system clock", err)
+			loc = time.Local
+		}
 		for {
-			now := time.Now()
-			nextRun := time.Date(now.Year(), now.Month(), now.Day(), 6, 0, 0, 0, now.Location())
+			now := time.Now().In(loc)
+			// Force the target date parameters to match your local timezone frame
+			nextRun := time.Date(now.Year(), now.Month(), now.Day(), 6, 0, 0, 0, loc)
 			if now.After(nextRun) {
 				nextRun = nextRun.Add(24 * time.Hour)
 			}
 
-			log.Printf("[Digest] Next scheduled health matrix dispatch window locked: %v", nextRun)
+			log.Printf("[Digest] Next automated morning health report locked for: %v", nextRun)
 			time.Sleep(time.Until(nextRun))
 
 			// Your daily digest now gracefully re-uses your true raw socket analyzer!
@@ -57,7 +63,10 @@ func startDailyDigest(s *discordgo.Session, channelID string) {
 
 // 🌐 Fail2Ban Webhook API Server Listener
 func startHTTPServer(s *discordgo.Session, channelID string) {
-	http.HandleFunc("/api/security/alert", func(w http.ResponseWriter, r *http.Request) {
+	// Create a private multiplexer instead of using the global http namespace
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/api/security/alert", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -70,24 +79,42 @@ func startHTTPServer(s *discordgo.Session, channelID string) {
 		}
 
 		var embed *discordgo.MessageEmbed
-		if payload.Action == "ban" {
+		switch payload.Action {
+		case "ban":
 			embed = &discordgo.MessageEmbed{
 				Title:       "🚨 SECURITY BREACH ALERT: IP BANNED",
 				Description: fmt.Sprintf("### 🔒 Fail2Ban Jail Triggered\n👤 **Offending IP:** `%s`\n⛓️ **Active Jail:** `%s`\n❌ **Failed Attempts:** %s counts", payload.IP, payload.Jail, payload.Failures),
 				Color:       0xD32F2F,
 				Timestamp:   time.Now().Format(time.RFC3339),
 			}
+		case "unban":
+			embed = &discordgo.MessageEmbed{
+				Title:       "🔓 SECURITY INFO: BAN EXPIRED",
+				Description: fmt.Sprintf("### 🕒 Cooldown Period Finished\n👤 **Released IP:** `%s`\n⛓️ **Jail Context:** `%s`", payload.IP, payload.Jail),
+				Color:       0xF5B041,
+				Timestamp:   time.Now().Format(time.RFC3339),
+			}
 		}
 
 		if embed != nil {
-			_, _ = s.ChannelMessageSendEmbed(channelID, embed)
+			_, err := s.ChannelMessageSendEmbed(channelID, embed)
+			if err != nil {
+				log.Printf("[Security Alert Error] Failed to dispatch embed: %v", err)
+			}
 		}
 		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"success"}`))
 	})
 
+	// Spin up the listener server inside its own thread using our custom mux
 	go func() {
-		if err := http.ListenAndServe(":8080", nil); err != nil {
-			log.Fatalf("Failed to spin up local API thread: %v", err)
+		server := &http.Server{
+			Addr:    ":8080",
+			Handler: mux,
+		}
+		log.Println("🌐 Isolate HTTP API Server listening on port :8080...")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Internal web listener error: %v", err)
 		}
 	}()
 }

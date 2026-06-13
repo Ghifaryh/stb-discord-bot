@@ -21,4 +21,4 @@ ssh root@100.84.225.86 "cd /mnt/ssd/projects/stb-discord-bot && docker load -i s
 echo "🧹 6. Cleaning temporary local workspace artifacts..."
 rm -f stb-bot stb-bot.tar
 
-echo "🎯 Deployment complete! /ping-isp and Fail2Ban listeners are live."
+echo "🎯 Deployment complete!"

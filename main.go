@@ -37,15 +37,15 @@ func main() {
 	// 3. Register Slash Commands to Target Server (Declared in commands.go)
 	registerSlashCommands(dg, guildID)
 
+	startHTTPServer(dg, logChannelID)
+	log.Println("🌐 Internal Security Webhook listener deployed on port :8080.")
+
 	// 4. Initialize Background Service Engines (Declared in services.go)
 	if logChannelID != "" {
 		startDailyDigest(dg, logChannelID)
 		log.Println("🚀 Automated Morning Health Digest subsystem initialized.")
-
-		startHTTPServer(dg, logChannelID)
-		log.Println("🌐 Internal Security Webhook listener deployed.")
 	} else {
-		log.Println("⚠️  DISCORD_LOG_CHANNEL_ID not set; background alerts suspended.")
+		log.Println("⚠️  DISCORD_LOG_CHANNEL_ID not set; 06:00 AM morning digest suspended.")
 	}
 
 	// 5. Keep system process alive cleanly
