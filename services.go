@@ -1,14 +1,25 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
+
+// ContainerInfo maps the raw structural array schema returned by the Docker Engine API
+type ContainerInfo struct {
+	ID     string   `json:"Id"`
+	Names  []string `json:"Names"`
+	State  string   `json:"State"`
+	Status string   `json:"Status"`
+}
 
 type Fail2BanPayload struct {
 	IP       string `json:"ip"`
@@ -30,12 +41,12 @@ func startDailyDigest(s *discordgo.Session, channelID string) {
 			log.Printf("[Digest] Next scheduled health matrix dispatch window locked: %v", nextRun)
 			time.Sleep(time.Until(nextRun))
 
-			// Re-use your resource metrics collector string formatting...
-			mockMetricsReport := "🧠 RAM and Storage allocations optimal."
+			// Your daily digest now gracefully re-uses your true raw socket analyzer!
+			dockerReport := getDockerContainers()
 
 			embed := &discordgo.MessageEmbed{
 				Title:       "🌅 gip-hm-stb-01 • Daily Automated Health Digest",
-				Description: mockMetricsReport,
+				Description: fmt.Sprintf("### 🐳 Managed Container Services\n%s", dockerReport),
 				Color:       0x9B59B6,
 				Timestamp:   time.Now().Format(time.RFC3339),
 			}
@@ -79,4 +90,52 @@ func startHTTPServer(s *discordgo.Session, channelID string) {
 			log.Fatalf("Failed to spin up local API thread: %v", err)
 		}
 	}()
+}
+
+// 🐋 Your Original Raw Unix Domain Socket Implementation Restored!
+func getDockerContainers() string {
+	// Create an HTTP client that communicates over the Unix Domain Socket
+	client := http.Client{
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", "/var/run/docker.sock")
+			},
+		},
+	}
+
+	// Query the native Docker Engine API directly for all containers
+	resp, err := client.Get("http://localhost/v1.45/containers/json?all=1")
+	if err != nil {
+		return "❌ Error: Unable to communicate with Docker socket."
+	}
+	defer resp.Body.Close()
+
+	var containers []ContainerInfo
+	if err := json.NewDecoder(resp.Body).Decode(&containers); err != nil {
+		return "❌ Error: Failed to parse container metadata."
+	}
+
+	if len(containers) == 0 {
+		return "ℹ️ No containers found on this system."
+	}
+
+	var sb strings.Builder
+	for _, c := range containers {
+		name := "unknown"
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+
+		statusEmoji := "🔴"
+		switch c.State {
+		case "running":
+			statusEmoji = "🟢"
+		case "paused":
+			statusEmoji = "🟡"
+		}
+
+		sb.WriteString(fmt.Sprintf("%s **%s**\n└─ *Status:* %s\n\n", statusEmoji, name, c.Status))
+	}
+
+	return sb.String()
 }

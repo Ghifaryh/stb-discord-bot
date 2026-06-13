@@ -7,9 +7,10 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	probing "github.com/prometheus-community/pro-bing"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
-// List of commands to register to Discord
 var commands = []*discordgo.ApplicationCommand{
 	{
 		Name:        "ping",
@@ -20,21 +21,49 @@ var commands = []*discordgo.ApplicationCommand{
 		Description: "Get underlying node hardware consumption parameters",
 	},
 	{
+		Name:        "services",
+		Description: "Scan host container orchestration engine",
+	},
+	{
 		Name:        "ping-isp",
 		Description: "Perform background latency checks against local gateway and backbone fiber",
 	},
 }
 
+func runPingTest(target string) string {
+	pinger, err := probing.NewPinger(target)
+	if err != nil {
+		return "❌ Configuration Error"
+	}
+
+	pinger.SetPrivileged(true)
+	pinger.Count = 3
+	pinger.Timeout = time.Second * 3
+
+	err = pinger.Run()
+	if err != nil {
+		return "🔴 Request Timeout / Unreachable"
+	}
+
+	stats := pinger.Statistics()
+	if stats.PacketLoss == 100 {
+		return "🔴 100% Packet Loss (Offline)"
+	}
+
+	return fmt.Sprintf("⚡ **%v** (📉 %.0f%% loss)", stats.AvgRtt.Round(time.Millisecond), stats.PacketLoss)
+}
+
 func registerSlashCommands(s *discordgo.Session, guildID string) {
-	log.Println("Registering application commands to home target server...")
+	log.Println("🛰️ Syncing application slash commands with Discord home server...")
 	_, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, guildID, commands)
 	if err != nil {
-		log.Printf("Error syncing application commands: %v", err)
+		log.Printf("❌ Error syncing application commands: %v", err)
+		return
 	}
+	log.Println("✅ Application slash commands synced successfully!")
 }
 
 func handleSlashCommands(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	// Change InteractionCreateApplicationCommand to InteractionApplicationCommand
 	if i.Type != discordgo.InteractionApplicationCommand {
 		return
 	}
@@ -48,6 +77,81 @@ func handleSlashCommands(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			},
 		})
 
+	case "status":
+		// 1. Tell Discord to show a clean, native loading state (No text content!)
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags: discordgo.MessageFlagsEphemeral, // Keeps it private if you want
+			},
+		})
+		if err != nil {
+			log.Printf("Error sending deferred status response: %v", err)
+			return
+		}
+
+		// 2. Fetch live host allocations
+		vMem, _ := mem.VirtualMemory()
+		rootDisk, _ := disk.Usage("/")
+		ssdDisk, _ := disk.Usage("/mnt/ssd")
+		sdDisk, _ := disk.Usage("/mnt/storage")
+
+		ramMsg := fmt.Sprintf("🧠 **RAM:** %dMB / %dMB (%.1f%% used)", vMem.Used/1024/1024, vMem.Total/1024/1024, vMem.UsedPercent)
+		rootMsg := fmt.Sprintf("💾 **Internal Storage (/)**: %.1fGB / %.1fGB used", float64(rootDisk.Used)/1024/1024/1024, float64(rootDisk.Total)/1024/1024/1024)
+
+		ssdMsg := "💽 **SSD (/mnt/ssd)**: Unmounted"
+		if ssdDisk != nil && ssdDisk.Total > 0 {
+			ssdMsg = fmt.Sprintf("💽 **SSD (/mnt/ssd)**: %.1fGB / %.1fGB used (%.1f%% free)", float64(ssdDisk.Used)/1024/1024/1024, float64(ssdDisk.Total)/1024/1024/1024, 100-ssdDisk.UsedPercent)
+		}
+
+		sdMsg := "📟 **SD Card (/mnt/storage)**: Unmounted"
+		if sdDisk != nil && sdDisk.Total > 0 {
+			sdMsg = fmt.Sprintf("📟 **SD Card (/mnt/storage)**: %.1fGB / %.1fGB used (%.1f%% free)", float64(sdDisk.Used)/1024/1024/1024, float64(sdDisk.Total)/1024/1024/1024, 100-sdDisk.UsedPercent)
+		}
+
+		// 3. Edit the deferred response directly with your clean embed card
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Embeds: &[]*discordgo.MessageEmbed{
+				{
+					Title:       "📊 gip-hm-stb-01 • Core Resource Allocations",
+					Description: fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s", ramMsg, rootMsg, ssdMsg, sdMsg),
+					Color:       0x3498DB,
+					Timestamp:   time.Now().Format(time.RFC3339),
+				},
+			},
+		})
+		if err != nil {
+			log.Printf("Error editing status interaction response: %v", err)
+		}
+
+	case "services":
+		// 1. Instantly respond with a native Discord loading state
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		})
+		if err != nil {
+			log.Printf("Error sending deferred services response: %v", err)
+			return
+		}
+
+		// 2. Query the native Docker Engine API directly over the Unix socket
+		dockerReport := getDockerContainers()
+
+		// 3. Edit the response with your crisp emerald green embed matrix card
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Embeds: &[]*discordgo.MessageEmbed{
+				{
+					Title:       "🐳 Managed Container Engine Orchestration",
+					Description: dockerReport,
+					Color:       0x2ECC71,
+					Timestamp:   time.Now().Format(time.RFC3339),
+				},
+			},
+		})
+		if err != nil {
+			log.Printf("Error editing services interaction response: %v", err)
+		}
+
 	case "ping-isp":
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
@@ -57,7 +161,6 @@ func handleSlashCommands(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 
-		// Run asynchronous ping logic
 		routerPing := runPingTest("192.168.100.1")
 		internetPing := runPingTest("1.1.1.1")
 
@@ -76,27 +179,4 @@ func handleSlashCommands(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			},
 		})
 	}
-}
-
-func runPingTest(target string) string {
-	pinger, err := probing.NewPinger(target)
-	if err != nil {
-		return "❌ Configuration Error"
-	}
-
-	pinger.SetPrivileged(true) // Combined with cap_add: [NET_ADMIN], handles low-level containers nicely
-	pinger.Count = 3
-	pinger.Timeout = time.Second * 3
-
-	err = pinger.Run()
-	if err != nil {
-		return "🔴 Request Timeout / Unreachable"
-	}
-
-	stats := pinger.Statistics()
-	if stats.PacketLoss == 100 {
-		return "🔴 100% Packet Loss (Offline)"
-	}
-
-	return fmt.Sprintf("⚡ **%v** (📉 %.0f%% loss)", stats.AvgRtt.Round(time.Millisecond), stats.PacketLoss)
 }
