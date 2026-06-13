@@ -18,3 +18,5 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /usr/share/zoneinfo/Asia/Jakarta:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
