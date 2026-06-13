@@ -28,6 +28,30 @@ var commands = []*discordgo.ApplicationCommand{
 		Name:        "ping-isp",
 		Description: "Perform background latency checks against local gateway and backbone fiber",
 	},
+	{
+		Name:        "link",
+		Description: "Generate a direct access link to a specified local service port",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "port",
+				Description: "The internal port number (e.g., 8080, 9000, 443)",
+				Required:    true,
+			},
+		},
+	},
+	{
+		Name:        "open-wiki",
+		Description: "Generate a direct access link to a specified wikipedia article",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "article",
+				Description: "The title of the Wikipedia article to open",
+				Required:    true,
+			},
+		},
+	},
 }
 
 func runPingTest(target string) string {
@@ -176,6 +200,37 @@ func handleSlashCommands(s *discordgo.Session, i *discordgo.InteractionCreate) {
 						Text: "Target Network: IndiHome Fiber",
 					},
 				},
+			},
+		})
+
+	case "link":
+		options := i.ApplicationCommandData().Options
+		targetPort := options[0].StringValue()
+
+		// 2. Build your clean development portal link
+		// Adjust the base domain/IP here to match your exact layout preference
+		generatedURL := fmt.Sprintf("http://localhost:%s", targetPort)
+
+		// 3. Respond with a clean message (enclosing the URL in <> stops Discord from creating an ugly blank embed preview)
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🔗 **STB Endpoint Portal Wrapper:**\n🌐 Direct Access Link: <%s>", generatedURL),
+			},
+		})
+
+	case "open-wiki":
+		options := i.ApplicationCommandData().Options
+		theCode := options[0].StringValue()
+
+		// 1. Format the URL cleanly (Note: Wikipedia articles use /wiki/Title format)
+		generatedURL := fmt.Sprintf("https://en.wikipedia.org/wiki/%s", theCode)
+
+		// 2. Respond without the angle brackets so Discord scrapes the link preview
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🔗 **Instant Wiki Portal Wrapper:**\n🌐 Direct Access Link: %s", generatedURL),
 			},
 		})
 	}
